@@ -1,0 +1,19 @@
+gitlab:
+  base_url: https://gitlab.com
+  token: CHANGE_ME
+  timeout: 10s
+
+poll:
+  interval: 20s
+  projects:
+    - project_id: 111111
+      ref: main
+      enabled: true
+      name: core
+    - project_id: 222222
+      ref: develop
+      enabled: false
+      name: aux
+
+cache:
+  path: ~/.cache/ci_status.json

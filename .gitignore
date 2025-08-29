@@ -1,1 +1,42 @@
-.idea
+# Binaries
+/bin/
+/*.exe
+/*.exe~
+/*.dll
+/*.so
+/*.dylib
+/*.test
+
+# Go build cache & test artifacts
+*.out
+*.cover
+coverage.html
+coverage.out
+
+# Go workspace
+*.log
+*.tmp
+
+# Dependency directories (Go modules will recreate)
+/vendor/
+
+# Editor/IDE
+.idea/
+.vscode/
+*.swp
+*~
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Local configs
+config.yaml
+*.lock
+
+# Cache / runtime state
+.cache/
+*.pid
+
+# Waybar & helper
+ci_status.json
