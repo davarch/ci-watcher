@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"os"
 	"sync"
 	"time"
 
@@ -10,16 +11,19 @@ import (
 )
 
 type Scheduler struct {
-	log   *zap.Logger
-	use   *PollUseCase
-	every time.Duration
+	log       *zap.Logger
+	use       *PollUseCase
+	every     time.Duration
+	pauseFile string
 
 	mu   sync.RWMutex
 	refs []domain.ProjectRef
 }
 
-func NewScheduler(l *zap.Logger, u *PollUseCase, refs []domain.ProjectRef, every time.Duration) *Scheduler {
-	return &Scheduler{log: l, use: u, refs: refs, every: every}
+func NewScheduler(l *zap.Logger, u *PollUseCase, refs []domain.ProjectRef, every time.Duration, pauseFile string) *Scheduler {
+	return &Scheduler{
+		log: l, use: u, refs: refs, every: every, pauseFile: pauseFile,
+	}
 }
 
 func (s *Scheduler) UpdateRefs(refs []domain.ProjectRef) {
@@ -33,16 +37,32 @@ func (s *Scheduler) Run(ctx context.Context) {
 	t := time.NewTicker(s.every)
 	defer t.Stop()
 
-	s.runAll(ctx)
+	s.tick(ctx)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			s.runAll(ctx)
+			s.tick(ctx)
 		}
 	}
+}
+
+func (s *Scheduler) tick(ctx context.Context) {
+	if s.isPaused() {
+		s.log.Debug("paused: skipping poll")
+		return
+	}
+	s.runAll(ctx)
+}
+
+func (s *Scheduler) isPaused() bool {
+	if s.pauseFile == "" {
+		return false
+	}
+	_, err := os.Stat(s.pauseFile)
+	return err == nil
 }
 
 func (s *Scheduler) runAll(ctx context.Context) {

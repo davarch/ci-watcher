@@ -28,8 +28,9 @@ type Config struct {
 	} `yaml:"gitlab"`
 
 	Poll struct {
-		Interval time.Duration `yaml:"interval"`
-		Projects []Project     `yaml:"projects"`
+		Interval  time.Duration `yaml:"interval"`
+		Projects  []Project     `yaml:"projects"`
+		PauseFile string        `yaml:"pause_file"`
 	} `yaml:"poll"`
 
 	Cache struct {
@@ -123,6 +124,10 @@ func Load(path string) (Config, error) {
 		return c, errors.New("no projects configured (YAML or ENV)")
 	}
 
+	if c.Poll.PauseFile == "" {
+		c.Poll.PauseFile = expandHome("~/.cache/ci_paused")
+	}
+
 	return c, nil
 }
 
@@ -140,13 +145,13 @@ func Save(path string, c Config) error {
 	if err != nil {
 		return err
 	}
-	defer lf.Close()
+	defer func() { _ = lf.Close() }()
 
 	if runtime.GOOS != "windows" {
 		if err := syscall.Flock(int(lf.Fd()), syscall.LOCK_EX); err != nil {
 			return err
 		}
-		defer syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
+		defer func() { _ = syscall.Flock(int(lf.Fd()), syscall.LOCK_UN) }()
 	}
 
 	b, err := yaml.Marshal(&c)
@@ -178,14 +183,6 @@ func getenv(k, def string) string {
 		return v
 	}
 	return def
-}
-
-func dur(s string) time.Duration {
-	d, _ := time.ParseDuration(s)
-	if d == 0 {
-		d = 20 * time.Second
-	}
-	return d
 }
 
 func expandHome(p string) string {

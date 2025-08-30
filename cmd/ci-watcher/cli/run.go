@@ -47,7 +47,7 @@ var runCmd = &cobra.Command{
 			log.Fatal("no enabled projects")
 		}
 
-		sched := application.NewScheduler(log, uc, refs, cfg.Poll.Interval)
+		sched := application.NewScheduler(log, uc, refs, cfg.Poll.Interval, cfg.Poll.PauseFile)
 		watchAndReload(cfgPath, cfg.Poll.Interval, log, sched)
 
 		ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
@@ -59,6 +59,7 @@ var runCmd = &cobra.Command{
 			zap.Duration("every", cfg.Poll.Interval),
 			zap.String("cache", cfg.Cache.Path),
 			zap.String("gitlab", cfg.GitLab.BaseURL),
+			zap.String("pause_file", cfg.Poll.PauseFile),
 		)
 		sched.Run(ctx)
 	},
@@ -68,7 +69,7 @@ func init() {
 	rootCmd.AddCommand(runCmd)
 }
 
-func watchAndReload(cfgPath string, interval time.Duration, log *zap.Logger, sched *application.Scheduler) {
+func watchAndReload(cfgPath string, _ time.Duration, log *zap.Logger, sched *application.Scheduler) {
 	if cfgPath == "" {
 		return
 	}

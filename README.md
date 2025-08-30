@@ -4,7 +4,8 @@
 - shows native desktop notifications (via `notify-send`);
 - writes the latest pipeline status into a JSON cache file (for [Waybar](https://github.com/Alexays/Waybar));
 - provides a CLI to enable/disable projects, list them, etc.;
-- supports config hot-reload while running.
+- supports config hot-reload while running;
+- can be paused/resumed from Waybar with a right-click.
 
 This is especially useful for developers who want a tiny **desktop CI monitor** (e.g. in Sway/Wayland with Waybar).
 
@@ -13,13 +14,14 @@ This is especially useful for developers who want a tiny **desktop CI monitor** 
 ## Features
 - Poll one or multiple GitLab projects/branches.
 - Show `success` / `failed` / `running` / `canceled` notifications.
-- System tray/Waybar integration with colored status indicator.
+- **Pause/Resume polling** by right-clicking the Waybar module.
+- Hot-reload of `config.yaml` — no restart required.
+- Waybar integration with colors and click actions.
 - CLI to:
     - `run` the scheduler,
     - `list` configured projects,
     - `enable`/`disable` projects quickly,
     - `version`, `completion`.
-- Hot-reload of `config.yaml` — no restart required.
 - Works with `systemd --user` for background service.
 
 ---
@@ -68,6 +70,7 @@ gitlab:
 
 poll:
   interval: 20s
+  pause_file: ~/.cache/ci_paused     # path to pause-flag file (optional)
   projects:
     - name: core
       project_id: 111111
@@ -144,14 +147,24 @@ systemctl --user stop ci-watcher.service
 Create `~/.local/bin/ci-watcher-waybar`:
 ```bash
 #!/usr/bin/env bash
-f="$HOME/.cache/ci_status.json"
-if jq -e . "$f" >/dev/null 2>&1; then
-  status=$(jq -r '.status // "no-ci"' "$f")
-  text=$(jq -r '(.status // "no-ci") + " #" + ((.pipeline_id // 0)|tostring)' "$f")
-  url=$(jq -r '.url // ""' "$f")
+set -euo pipefail
+
+cache="$HOME/.cache/ci_status.json"
+paused="$HOME/.cache/ci_paused"
+
+if [[ -e "$paused" ]]; then
+  printf '{"text":"paused","class":"paused","tooltip":"polling paused"}\n'
+  exit 0
+fi
+
+if jq -e . "$cache" >/dev/null 2>&1; then
+  status=$(jq -r '.status // "no-ci"' "$cache")
+  text=$(jq -r '(.status // "no-ci") + " #" + ((.pipeline_id // 0)|tostring)' "$cache")
+  url=$(jq -r '.url // ""' "$cache")
 else
   status="no-ci"; text="no-ci"; url=""
 fi
+
 printf '{"text":"%s","class":"%s","tooltip":"%s"}\n' "$text" "$status" "$url"
 ```
 Make it executable:
@@ -169,6 +182,7 @@ chmod +x ~/.local/bin/ci-watcher-waybar
     "interval": 3,
     "return-type": "json",
     "on-click": "bash -lc 'u=$(jq -r .url ~/.cache/ci_status.json 2>/dev/null); [ -n "$u" ] && xdg-open "$u" || true'",
+    "on-click-right": "bash -lc 'p=$HOME/.cache/ci_paused; if [ -e "$p" ]; then rm -f "$p"; notify-send "CI Watcher" "Resumed"; else touch "$p"; notify-send "CI Watcher" "Paused"; fi'",
     "tooltip": true
   }
 }
@@ -183,23 +197,20 @@ chmod +x ~/.local/bin/ci-watcher-waybar
 #custom-ci.running  { background: rgba(180,140,20,.25); color: #ffd27a; }
 #custom-ci.canceled { background: rgba(120,120,120,.25); color: #cfcfcf; }
 #custom-ci.no-ci    { opacity: .6; }
+#custom-ci.paused   { background: rgba(120,120,120,.25); color: #cfcfcf; font-style: italic; }
 ```
 
-Reload Waybar, and you’ll see `success #12345` (or other status) colored accordingly.  
-Clicking the block opens the pipeline URL in your browser.
+Reload Waybar → left click opens pipeline, right click toggles pause/resume.
 
 ---
 
 ## Development
 
 ```bash
-go test ./...
-go build -o bin/ci-watcher ./cmd/ci-watcher
-```
-
-Build with version info:
-```bash
-go build -trimpath   -ldflags="-s -w -X main.version=$(git describe --tags --always 2>/dev/null || echo dev)"   -o bin/ci-watcher ./cmd/ci-watcher
+make test      # run unit tests
+make build     # build binary
+make run       # run with local config
+make lint      # run golangci-lint (if installed)
 ```
 
 ---
